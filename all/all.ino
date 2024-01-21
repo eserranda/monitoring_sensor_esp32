@@ -30,8 +30,8 @@ DHT dht_sensor(DHT_SENSOR_PIN, DHT_SENSOR_TYPE);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
 //-- end Lcd Oled-- //
 
-const char *ssid = "Tes";
-const char *password = "123456789";
+const char *ssid = "Yos";
+const char *password = "yoelmgs01";
 
 
 const int sensor_api = 32;
@@ -39,7 +39,8 @@ const int sensor_gas = 34;
 
 const int SMOKE_THRESHOLD = 800;
 
-const char *uri = "http://192.168.2.195:8000/api/data";
+// const char *uri = "http://192.168.2.195:8000/api/data";
+const char *uri = "http://192.168.21.65:8000/api/data";
 String apiKey = "Sensor01";
 
 const unsigned long timeout = 5000;  // waktu menghubungkan ke wifi
@@ -84,6 +85,10 @@ const unsigned char black_line[] PROGMEM = {
 };
 
 const unsigned char black_line_api[] PROGMEM = {
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
   0xFF, 0xFF, 0xFF, 0xFF,
   0xFF, 0xFF, 0xFF, 0xFF,
   0xFF, 0xFF, 0xFF, 0xFF,
@@ -154,7 +159,7 @@ void checkWiFiConnection() {
     } else {
       Serial.println("Failed to connect to WiFi");
     }
-  } 
+  }
 }
 
 
@@ -219,7 +224,7 @@ void loop() {
   }
 
   if (millis() - lastSensorReadTime > sensorReadInterval) {
-    Serial.println("Read Data Sensors...");
+    // Serial.println("Read Data Sensors...");
     readSensors();                  // Baca sensor
     lastSensorReadTime = millis();  // Catat waktu terakhir pembacaan sensor
   }
@@ -233,6 +238,19 @@ void readSensors() {
   int nilai_sensor_gas = analogRead(sensor_gas);
   int nilai_sensor_api = digitalRead(sensor_api);
   float nilai_sensor_suhu = dht_sensor.readTemperature();
+
+  Serial.print("Sensor Asap  : ");
+  Serial.println(nilai_sensor_co);
+  Serial.print("Sensor Gas   : ");
+  Serial.println(nilai_sensor_gas);
+  Serial.print("Sensor Api   : ");
+  Serial.println(nilai_sensor_api);
+  Serial.print("Suhu Ruangan : ");
+  Serial.print(nilai_sensor_suhu);
+  Serial.println(" *C");
+  Serial.println();
+
+
 
   if (isnan(nilai_sensor_suhu)) {
     Serial.println("Sensor Suhu Tidak Terhubung");
@@ -267,6 +285,7 @@ void displayData(int gas, int api, float co, float suhu) {
   display.drawBitmap(37, 27, black_line, 40, 10, 0);      // Gas
   display.drawBitmap(37, 38, black_line, 40, 10, 0);      // CO
   display.drawBitmap(37, 49, black_line, 40, 10, 0);      // Suhu
+  display.drawBitmap(25, 2, black_line_api, 95, 10, 0);   // Keterangan
 
   display.setCursor(0, 16);
   display.print("Api  : ");
@@ -274,20 +293,41 @@ void displayData(int gas, int api, float co, float suhu) {
     display.println("Aman");
   } else {
     display.println("Terdeteksi!");
+    display.setCursor(25, 3);
+    display.print("Api Terdeteksi");
   }
 
   display.setCursor(0, 27);
   display.print("Gas  : ");
   display.println(gas);
 
+  if (gas > 2) {
+    display.setTextSize(1);
+    display.setCursor(25, 3);
+    display.print("Gas Terdeteksi");
+  }
+
   display.setCursor(0, 38);
-  display.print("CO   : ");
+  display.print("Asap : ");
   display.println(co);
+
+  if (co > 2) {
+    display.setTextSize(1);
+    display.setCursor(25, 3);
+    display.print("Asap Terdeteksi");
+  }
 
   display.setCursor(0, 49);
   display.print("Suhu : ");
-  display.println(suhu, 1);
+  display.print(suhu, 1 );
+  display.print( (char)247);  // degree symbol
+  display.println("C");
 
+  if (suhu > 33) {
+    display.setTextSize(1);
+    display.setCursor(25, 3);
+    display.print("Suhu Tinggi!");
+  }
   display.display();
 }
 
@@ -306,6 +346,5 @@ void sendHttpRequest(const char *uri, String apiKey, String sensor, String data)
   } else {
     Serial.println("Failed to make HTTP request");
   }
-
   http.end();
 }

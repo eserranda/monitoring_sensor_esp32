@@ -17,9 +17,8 @@
 #define RatioMQ7CleanAir (27.5)
 #define DHT_SENSOR_PIN 15
 #define DHT_SENSOR_TYPE DHT22
- 
 
-const int button = 18;
+#define BUTTON_PIN 4
 
 MQUnifiedsensor MQ7(Board, Voltage_Resolution, ADC_Bit_Resolution, PinMQ7, TypeMQ7);
 DHT dht_sensor(DHT_SENSOR_PIN, DHT_SENSOR_TYPE);
@@ -104,64 +103,14 @@ const unsigned char black_line_api[] PROGMEM = {
   0xFF, 0xFF, 0xFF, 0xFF
 };
 
-//------------- Alert Sound Effect --------------//
-// int melody[] = {
-//   1500, 1500, 1500, 1200, 1200, 1200, 1500, 1500, 1500, 1200, 1200, 1200
-// };
-
-// int noteDuration[] = {
-//   500, 300, 500, 500, 300, 500, 500, 300, 500, 500, 300, 500
-// };
-
-// int melodyLength = sizeof(melody) / sizeof(melody[0]);
-
-// void alertBuzzer() {
-//   for (int i = 0; i < melodyLength; i++) {
-//     ledcWriteTone(0, melody[i]);
-//     delay(noteDuration[i]);
-//     ledcWrite(0, 0);
-//     delay(50);
-//   }
-// }
-
-
-// Variabel untuk menyimpan status tombol (HIGH atau LOW)
-// int buttonState = HIGH;
-
 unsigned long lastSensorReadTime = 0;
 const int sensorReadInterval = 1000;  // Interval pembacaan sensor dalam  milidetik (1 detik)
 
 unsigned long lastCheckWiFiTime = 0;  // Variabel untuk menyimpan waktu terakhir pengecekan WiFi
 
-void checkWiFiConnection() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Not connected to WiFi, trying to connect...");
-    WiFi.begin(ssid, password);
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED) {
-      if (millis() - start >= timeout) {
-        Serial.println("Gagal Menghubungkan ke Wifi!");
-        Serial.println("Mode Offline");
-        break;
-      }
-      delay(1000);
-      Serial.println("Connecting to WiFi...");
-      display.drawBitmap(0, 0, logo_wifi, 15, 15, 1);
-      display.display();
-      delay(500);
-      display.drawBitmap(0, 0, logo_wifi_black, 15, 15, 0);
-      display.display();
-    }
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("Connected to WiFi");
-      display.drawBitmap(0, 0, logo_wifi, 15, 15, 1);
-      display.display();
-    } else {
-      Serial.println("Failed to connect to WiFi");
-    }
-  }
-}
-
+bool alarmAktif = false;
+bool tombolDitekan = false;
+bool emergency = false;
 
 void setup() {
   Serial.begin(9600);
@@ -176,6 +125,8 @@ void setup() {
   }
 
   pinMode(sensor_api, INPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
   dht_sensor.begin();
   MQ7.setRegressionMethod(1);
 
@@ -183,7 +134,6 @@ void setup() {
   MQ7.setB(-1.518);
 
   MQ7.init();
-
   Serial.print("Calibrating please wait.");
 
   float calcR0 = 0;
@@ -211,14 +161,33 @@ void setup() {
 }
 
 void loop() {
-  int buttonState = digitalRead(button);
-  static int lastButtonState = HIGH;
-  
-  if (buttonState != lastButtonState) {
-    if (buttonState == LOW) {
-      Serial.print("");
-    }
-    lastButtonState = buttonState;
+  // bool statusAlarm = digitalRead(alarmAktif);
+  int buttonState = digitalRead(BUTTON_PIN);
+
+  if (alarmAktif == true && buttonState == LOW && !tombolDitekan) {
+    Serial.println("Matikan Alaram Ditekan!");
+    Serial2.print("AlarmOff");
+    tombolDitekan = true;  // Set variabel penanda
+    alarmAktif = false;
+  }
+
+  if (emergency == true && buttonState == LOW && !tombolDitekan) {
+    Serial.println("Matikan Alaram Ditekan!");
+    Serial2.print("AlarmOff");
+    tombolDitekan = true;  // Set variabel penanda
+    emergency = false;
+  }
+
+  if (alarmAktif == false && buttonState == LOW && !tombolDitekan) {
+    Serial.println("Tombol Emergency Ditekan!");
+    Serial2.print("Emergency");
+    tombolDitekan = true;  // Set variabel penanda
+    emergency = true;
+  }
+  delay(20);
+
+  if (buttonState == HIGH) {
+    tombolDitekan = false;
   }
 
   if (millis() - lastSensorReadTime > sensorReadInterval) {
@@ -239,7 +208,7 @@ void readSensors() {
 
   int nilai_sensor_api = digitalRead(sensor_api);
   float nilai_sensor_suhu = dht_sensor.readTemperature();
-  
+
   Serial.print("Sensor Asap  : ");
   Serial.println(nilai_sensor_co);
   Serial.print("Sensor Gas   : ");
@@ -251,8 +220,6 @@ void readSensors() {
   Serial.println(" *C");
   Serial.println();
 
-
-
   if (isnan(nilai_sensor_suhu)) {
     Serial.println("Sensor Suhu Tidak Terhubung");
   }
@@ -262,18 +229,28 @@ void readSensors() {
   if (nilaiTeganganGas > 1.00) {
     Serial2.print("Gas");
     Serial.println("Gas Terdeteksi");
+    alarmAktif = true;
     String nilai_sensor_gas = "1";
     String sensor = "sensor_gas";
-    sendHttpRequest(uri, apiKey, sensor, nilai_sensor_gas);
-     
+    // sendHttpRequest(uri, apiKey, sensor, nilai_sensor_gas);
   }
 
   if (nilai_sensor_api == 0) {
     Serial.println("Api Terseteksi");
+    Serial2.print("Api");
+    alarmAktif = true;
     String nilai_sensor_api_str = String(nilai_sensor_api);
     String sensor = "sensor_api";
-    sendHttpRequest(uri, apiKey, sensor, nilai_sensor_api_str);
- 
+    // sendHttpRequest(uri, apiKey, sensor, nilai_sensor_api_str);
+  }
+
+  if (nilai_sensor_co > 2) {
+    Serial.println("Asap Terseteksi");
+    Serial2.print("Asap");
+    alarmAktif = true;
+    String nilai_sensor_co_str = String(nilai_sensor_co);
+    String sensor = "sensor_asap";
+    // sendHttpRequest(uri, apiKey, sensor, nilai_sensor_co_str);
   }
 }
 
@@ -334,7 +311,6 @@ void displayData(float gas, int api, float co, float suhu) {
 }
 
 void sendHttpRequest(const char *uri, String apiKey, String sensor, String data) {
-
   HTTPClient http;
   http.begin(uri);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
@@ -349,4 +325,34 @@ void sendHttpRequest(const char *uri, String apiKey, String sensor, String data)
     Serial.println("Failed to make HTTP request");
   }
   http.end();
+  alarmAktif == false;
+}
+
+void checkWiFiConnection() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Not connected to WiFi, trying to connect...");
+    WiFi.begin(ssid, password);
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED) {
+      if (millis() - start >= timeout) {
+        Serial.println("Gagal Menghubungkan ke Wifi!");
+        Serial.println("Mode Offline");
+        break;
+      }
+      delay(1000);
+      Serial.println("Connecting to WiFi...");
+      display.drawBitmap(0, 0, logo_wifi, 15, 15, 1);
+      display.display();
+      delay(500);
+      display.drawBitmap(0, 0, logo_wifi_black, 15, 15, 0);
+      display.display();
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("Connected to WiFi");
+      display.drawBitmap(0, 0, logo_wifi, 15, 15, 1);
+      display.display();
+    } else {
+      Serial.println("Failed to connect to WiFi");
+    }
+  }
 }

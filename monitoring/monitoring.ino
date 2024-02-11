@@ -240,18 +240,18 @@ void readSensors() {
   // }
 
   // Sensor Gas
-  if (nilaiTeganganGas > 1.00 && !httpRequestSentSensorGas) {
-    Serial2.print("Gas");
-    Serial.println("Gas Terdeteksi");
-    alarmAktif = true;
-    String nilai_sensor_gas = "1";
-    String sensor = "sensor_gas";
-    sendHttpRequest(uri, apiKey, sensor, nilai_sensor_gas);
-  }
+  // if (nilaiTeganganGas > 1.00 && !httpRequestSentSensorGas) {
+  //   Serial2.print("Gas");
+  //   Serial.println("Gas Terdeteksi");
+  //   alarmAktif = true;
+  //   String nilai_sensor_gas = "1";
+  //   String sensor = "sensor_gas";
+  //   sendHttpRequest(uri, apiKey, sensor, nilai_sensor_gas);
+  // }
 
-  if (nilaiTeganganGas <= 1.00) {
-    httpRequestSentSensorGas = false;
-  }
+  // if (nilaiTeganganGas <= 1.00) {
+  //   httpRequestSentSensorGas = false;
+  // }
 
   // Sensor Api
   if (nilai_sensor_api == 0 && !httpRequestSentSensorApi) {
@@ -287,11 +287,12 @@ void readSensors() {
     }
   }
 
-  Serial.print("Suhu Now : ");
+  Serial.print("Suhu Sekarang : ");
   Serial.println(nilai_sensor_suhu);
 
-  Serial.print("Target   : ");
+  Serial.print("Target       : ");
   Serial.println(suhuAwal + 1);
+
   // Sensor Suhu
   if (waktuDeteksiAsap > 0 && nilai_sensor_suhu > (suhuAwal + 1) && nilai_sensor_co > 2.00 && !httpRequestSentSensorAsap) {
     Serial.println("Suhu Meningkat. Indikasi Kebakaran!");

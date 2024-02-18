@@ -20,6 +20,7 @@ void setup() {
   MG995_Servo.attach(Servo_PWM);
   MG995_Servo.write(0);
   delay(1000);
+  MG995_Servo.detach();  //Stop
 }
 
 void loop() {
@@ -34,8 +35,10 @@ void loop() {
 
     if (data.equals("Gas")) {
       Serial.println("Gas");
+      MG995_Servo.attach(Servo_PWM);
       MG995_Servo.write(180);
       delay(1000);
+      MG995_Servo.detach();  //Stop
       nyalakanAlarm = true;
       bunyikanAlarmKebocoranGas(matikanAlarm);
     } else if (data.equals("Api")) {
@@ -43,7 +46,14 @@ void loop() {
       nyalakanAlarm = true;
       bunyikanAlarmApi(matikanAlarm);
       // bunyikanAlarmKebocoranGas(matikanAlarm);
-
+    } else if (data.equals("Kebakaran")) {
+      Serial.println("Kebakaran");
+      MG995_Servo.attach(Servo_PWM);
+      MG995_Servo.write(180);
+      delay(1000);
+      MG995_Servo.detach();
+      nyalakanAlarm = true;
+      bunyikanAlarmApi(matikanAlarm);
     } else if (data.equals("Asap")) {
       Serial.println("Asap");
       nyalakanAlarm = true;
@@ -52,6 +62,12 @@ void loop() {
       Serial.println("Emergency");
       nyalakanAlarm = true;
       bunyikanSirine(matikanAlarm);
+    } else if (data.equals("Buka Regulator")) {
+      Serial.println("Buka Regulator");
+      MG995_Servo.attach(Servo_PWM);
+      MG995_Servo.write(180);
+      delay(1000);
+      MG995_Servo.detach();
     }
 
     data = "";
@@ -175,11 +191,11 @@ void bunyikanSirine(bool &matikanAlarm) {
     for (int i = frekuensiAwal; i <= frekuensiAkhir && !matikanAlarm; i += langkahFrekuensi) {
       tone(buzzerPin, i);          // Mulai bunyi dengan frekuensi i
       digitalWrite(ledPin, HIGH);  // Nyalakan LED
-      delay(durasiBunyi);           // Tahan bunyi selama durasi yang ditentukan
+      delay(durasiBunyi);          // Tahan bunyi selama durasi yang ditentukan
       digitalWrite(ledPin, LOW);   // Matikan LED
     }
 
-    noTone(buzzerPin);    // Hentikan bunyi
+    noTone(buzzerPin);  // Hentikan bunyi
     digitalWrite(ledPin, LOW);
   }
 }

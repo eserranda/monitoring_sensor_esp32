@@ -1,14 +1,19 @@
 #include <SoftwareSerial.h>
 #include <Servo.h>
 
+
 #define Servo_PWM 6
 Servo MG995_Servo;
 
 SoftwareSerial Serial2(2, 3);  // 2 tx0, 3 rx1
+
 int buzzerPin = 5;
 int ledPin = 13;
 
 String data;
+String gpsData;
+
+String receivedMessage;
 
 bool matikanAlarm = false;
 bool nyalakanAlarm = false;
@@ -16,6 +21,7 @@ bool nyalakanAlarm = false;
 void setup() {
   Serial.begin(9600);
   Serial2.begin(9600);
+
   pinMode(buzzerPin, OUTPUT);
   MG995_Servo.attach(Servo_PWM);
   MG995_Servo.write(0);
@@ -24,53 +30,31 @@ void setup() {
 }
 
 void loop() {
-  while (Serial2.available() > 0) {
-    delay(10);
-    char d = Serial2.read();
-    data += d;
-  }
+  if (Serial2.available()) {             // Periksa apakah ada data yang tersedia dari ESP32
+    char receivedChar = Serial2.read();  // Baca karakter yang diterima dari ESP32
+    receivedMessage += receivedChar;     // Tambahkan karakter ke dalam pesan yang diterima
 
-  if (data.length() > 0) {
-    // Serial.println(data);
-
-    if (data.equals("Gas")) {
-      Serial.println("Gas");
-      MG995_Servo.attach(Servo_PWM);
-      MG995_Servo.write(180);
-      delay(1000);
-      MG995_Servo.detach();  //Stop
-      nyalakanAlarm = true;
-      bunyikanAlarmKebocoranGas(matikanAlarm);
-    } else if (data.equals("Api")) {
-      Serial.println("Api");
-      nyalakanAlarm = true;
-      bunyikanAlarmApi(matikanAlarm);
-      // bunyikanAlarmKebocoranGas(matikanAlarm);
-    } else if (data.equals("Kebakaran")) {
-      Serial.println("Kebakaran");
-      MG995_Servo.attach(Servo_PWM);
-      MG995_Servo.write(180);
-      delay(1000);
-      MG995_Servo.detach();
-      nyalakanAlarm = true;
-      bunyikanAlarmApi(matikanAlarm);
-    } else if (data.equals("Asap")) {
-      Serial.println("Asap");
-      nyalakanAlarm = true;
-      bunyikanSirine(matikanAlarm);
-    } else if (data.equals("Emergency")) {
-      Serial.println("Emergency");
-      nyalakanAlarm = true;
-      bunyikanSirine(matikanAlarm);
-    } else if (data.equals("Buka Regulator")) {
-      Serial.println("Buka Regulator");
-      MG995_Servo.attach(Servo_PWM);
-      MG995_Servo.write(180);
-      delay(1000);
-      MG995_Servo.detach();
+    if (receivedChar == '\n') {
+      if (receivedMessage.equals("Emergency\n")) {
+        Serial.println(receivedMessage);
+        Serial.println("Emergency Log");
+        nyalakanAlarm = true;
+        bunyikanSirine(matikanAlarm);
+      } else if (receivedMessage.equals("Kebakaran\n")) {
+        Serial.println(receivedMessage);
+        Serial.println("Kebakaran Log");
+        nyalakanAlarm = true;
+        bunyikanAlarmApi(matikanAlarm);
+      } else if (receivedMessage.equals("BukaRegulator\n")) {
+        Serial.println(receivedMessage);
+        Serial.println("BukaRegulator Log");
+        MG995_Servo.attach(Servo_PWM);
+        MG995_Servo.write(180);
+        delay(1000);
+        MG995_Servo.detach();
+      }
+      receivedMessage = "";
     }
-
-    data = "";
   }
 }
 
@@ -85,21 +69,15 @@ void bunyikanAlarmKebocoranGas(bool &matikanAlarm) {
   pinMode(ledPin, OUTPUT);
 
   while (!matikanAlarm) {  // false
-    // Baca data dari Serial2
-    while (Serial2.available() > 0) {
-      char d = Serial2.read();
-      data += d;
-    }
-
-    // Proses data jika ada
-    if (data.length() > 0) {
-      if (data.equals("AlarmOff")) {
-        Serial.println("AlarmOff");
+                           // Baca data dari Serial2K
+    if (Serial2.available() > 0) {
+      String receivedMessage = Serial2.readStringUntil('\n');
+      if (receivedMessage.equals("AlarmOff")) {
+        Serial.println("AlarmOff Log");
         matikanAlarm = false;
         nyalakanAlarm = false;
-        break;  // Keluar dari loop jika "AlarmOff" diterima
+        break;  // Keluar dari loop jika pesan diterima
       }
-      data = "";
     }
 
     // Eksekusi bunyi
@@ -127,25 +105,20 @@ void bunyikanAlarmApi(bool &matikanAlarm) {
   int durasiBunyi = 300;      // Durasi setiap bunyi dalam milidetik
   int jedaAntarBunyi = 200;   // Jeda antara setiap bunyi dalam milidetik
 
-
   int ledPin = 13;
   pinMode(ledPin, OUTPUT);
 
-  while (!matikanAlarm) {
-    while (Serial2.available() > 0) {
-      char d = Serial2.read();
-      data += d;
-    }
-
-    if (data.length() > 0) {
-      if (data.equals("AlarmOff")) {
-        Serial.println("AlarmOff");
+  while (!matikanAlarm) {  // false
+    if (Serial2.available() > 0) {
+      String receivedMessage = Serial2.readStringUntil('\n');
+      if (receivedMessage.equals("AlarmOff")) {
+        Serial.println("AlarmOff Log");
         matikanAlarm = false;
         nyalakanAlarm = false;
-        break;  // Keluar dari loop jika "AlarmOff" diterima
+        break;
       }
-      data = "";
     }
+
     for (int j = frekuensiAwal; j <= frekuensiAkhir; j += langkahFrekuensi) {
       tone(buzzerPin, j);          // Mulai bunyi dengan frekuensi j
       digitalWrite(ledPin, HIGH);  // Nyalakan LED
@@ -171,20 +144,14 @@ void bunyikanSirine(bool &matikanAlarm) {
   pinMode(ledPin, OUTPUT);
 
   while (!matikanAlarm) {
-    // Tambahkan loop untuk membaca data dari Serial2
-    while (Serial2.available() > 0) {
-      char d = Serial2.read();
-      data += d;
-    }
-
-    if (data.length() > 0) {
-      if (data.equals("AlarmOff")) {
-        Serial.println("AlarmOff");
+    if (Serial2.available() > 0) {
+      String receivedMessage = Serial2.readStringUntil('\n');
+      if (receivedMessage.equals("AlarmEmergencyOff")) {
+        Serial.println("AlarmEmergencyOff Log");
         matikanAlarm = false;
         nyalakanAlarm = false;
-        break;  // Keluar dari loop jika "AlarmOff" diterima
+        break;  // Keluar dari loop jika pesan diterima
       }
-      data = "";
     }
 
     // Loop untuk bunyi sirine

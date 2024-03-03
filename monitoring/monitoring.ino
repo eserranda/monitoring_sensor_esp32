@@ -9,6 +9,9 @@
 #include <DHT.h>
 #include <MQUnifiedsensor.h>
 
+#include <SoftwareSerial.h>
+
+
 #define Board ("ESP-32")
 #define PinMQ7 (35)
 #define TypeMQ7 ("MQ-7")
@@ -40,9 +43,9 @@ const int SMOKE_THRESHOLD = 800;
 
 // const char *uri = "http://192.168.2.195:8000/api/data";
 
-// const char *uri = "http://192.168.2.195:8000/api/data";
-const char *uri = "http://damkar.helloelrand.com/api/data";
-String apiKey = "Sensor01";
+const char *uri = "http://192.168.2.195:8000/api/data";
+// const char *uri = "http://damkar.helloelrand.com/api/data";
+String apiKey = "Sensor02";
 
 const unsigned long timeout = 5000;  // waktu menghubungkan ke wifi
 
@@ -127,7 +130,7 @@ const unsigned char black_line_api[] PROGMEM = {
 
 void setup() {
   Serial.begin(9600);
-  Serial2.begin(9600);
+  Serial2.begin(9600, SERIAL_8N1, 1, 3);
 
   delay(10);
 
@@ -171,29 +174,36 @@ void setup() {
 
   display.clearDisplay();
   checkWiFiConnection();
+  MQ7.serialDebug(true);
 }
 
 void loop() {
+  // if (Serial.available() > 0) {
+  //   String data = Serial.readString();
+  //   Serial.print("Data yang diterima: ");
+  //   Serial.println(data);
+  // }
+
   int buttonState = digitalRead(BUTTON_PIN);
 
   if (alarmAktif == true && buttonState == LOW && !tombolDitekan) {
-    Serial.println("Matikan Alarm Ditekan!");
-    Serial2.print("AlarmOff");
+    // Serial.println("Matikan Alarm Ditekan!");
+    Serial2.print("AlarmOff\n");
     tombolDitekan = true;  // Set variabel penanda
     alarmAktif = false;
   }
 
   if (emergency == true && buttonState == LOW && !tombolDitekan) {
-    Serial.println("Matikan Alarm Emergency Ditekan!");
-    Serial2.print("AlarmOff");
+    // Serial.println("Matikan Alarm Emergency Ditekan!");
+    Serial2.print("AlarmEmergencyOff\n");
     tombolDitekan = true;  // Set variabel penanda
     emergency = false;
   }
 
   if (alarmAktif == false && buttonState == LOW && !tombolDitekan) {
-    Serial.println("Tombol Emergency Ditekan!");
-    Serial2.print("Emergency");
-    tombolDitekan = true;  // Set variabel penanda
+    // Serial.println("Tombol Emergency Ditekan!");
+    Serial2.print("Emergency\n");
+    tombolDitekan = true;   
     emergency = true;
   }
 
@@ -213,19 +223,22 @@ void loop() {
 }
 
 void readSensors() {
-  MQ7.update();
-  float nilai_sensor_co = MQ7.readSensor();                   // Mq-7
-  int gassensorAnalog = analogRead(sensor_gas);               // Mq-6
-  float nilaiTeganganGas = (gassensorAnalog / 4095.0) * 3.3;  //konversi nilai sensor Mq-6
-  int nilai_sensor_api = digitalRead(sensor_api);             // Sensor Api
-  float nilai_sensor_suhu = dht_sensor.readTemperature();     //Sensor Suhu
+  MQ7.update();                                  // Update data, the arduino will read the voltage from the analog pin
+  MQ7.readSensor();  // Sensor will read PPM concentration using the model, a and b values set previously or from the setup
+  // MQ7.serialDebug();                             // Will print the table on the serial port
+  float nilai_sensor_co = MQ7.readSensor();                // Mq-7
+  int gassensorAnalog = analogRead(sensor_gas);            // Mq-6
+  int nilai_sensor_api = digitalRead(sensor_api);          // Sensor Api
+  float nilai_sensor_suhu = dht_sensor.readTemperature();  //Sensor Suhu
 
-  int buttonState = digitalRead(BUTTON_PIN); // Tombol
-  // int nilai_sensor_emergency = 0; 
+
+  int buttonState = digitalRead(BUTTON_PIN);  // Tombol
+  int nilai_sensor_emergency = 0;
+
   // Serial.print("Sensor Asap  : ");
   // Serial.println(nilai_sensor_co);
   // Serial.print("Sensor Gas   : ");
-  // Serial.println(nilaiTeganganGas);
+  // Serial.println(gassensorAnalog);
   // Serial.print("Sensor Api   : ");
   // Serial.println(nilai_sensor_api);
   // Serial.print("Suhu Ruangan : ");
@@ -237,38 +250,26 @@ void readSensors() {
     Serial.println("Sensor Suhu Tidak Terhubung");
   }
 
-  displayData(nilaiTeganganGas, nilai_sensor_api, nilai_sensor_co, nilai_sensor_suhu);
+  displayData(gassensorAnalog, nilai_sensor_api, nilai_sensor_co, nilai_sensor_suhu);
 
   // ---------------- Logika Kondisi  ------------//
 
   // Sensor Gas > 2.00, Buka regulator
-  if (nilaiTeganganGas > 2.00) {
-    Serial2.print("Buka Regulator");
-    Serial.println("Gas Terdeteksi");
+  if (gassensorAnalog > 200) {
+    Serial2.print("BukaRegulator\n");
+    // Serial.println("Gas Terdeteksi");
   }
 
-  // Sesnor Api == 0 (Terdeteski), Sensor Asap > 2.00 , Suhu Naik
-  if (nilai_sensor_co > 2.00) {
-    Serial.println("Asap Terseteksi");
 
-    // Set waktu deteksi asap
-    waktuDeteksiAsap = millis();
-    // Set suhu awal
-    if (!suhuAwalTersimpan) {
-      suhuAwal = nilai_sensor_suhu;
-      suhuAwalTersimpan = true;
-    }
-  }
-
-  if (waktuDeteksiAsap > 0 && nilai_sensor_suhu > (suhuAwal + 2) && nilai_sensor_co > 2.00 && nilai_sensor_api == 0 && !httpRequestSentSensorApi) {
-    Serial.println("Asap Terdeteksi, Suhu Meningkat, Api Terdeteksi. Terjadi Kebakaran!!");
-    Serial2.print("Kebakaran");
+  if (nilai_sensor_suhu > 37.0 && nilai_sensor_co > 2.00 && nilai_sensor_api == 0 && !httpRequestSentSensorApi) {
+    // Serial.println("Asap Terdeteksi, Suhu Meningkat, Api Terdeteksi. Terjadi Kebakaran!!");
+    Serial2.print("Kebakaran\n");
     alarmAktif = true;
     String sensor_api = "sensor_api";
     String nilai_sensor_api = "1";
     sendHttpRequest(uri, apiKey, sensor_api, nilai_sensor_api);
     httpRequestSentSensorApi = true;
-  }
+  } 
 
   // Kembalikan http Req ke False, Siap mengirim notif ke server
   if (nilai_sensor_co <= 2.00 || nilai_sensor_api != 0) {
@@ -277,61 +278,29 @@ void readSensors() {
   }
 
   // Sensor Gas > 2.00 dan tombol Emergency == 1 (Ditekan)
-  if (nilaiTeganganGas > 2.00 && alarmAktif == false && buttonState == LOW && !tombolDitekan) {
-    Serial.println("Tombol Emergency Ditekan!");
-    Serial2.print("Buka Regulator");
-    Serial.println("Gas Terdeteksi, Tombol Emergency Di tekan");
+  if (gassensorAnalog > 200 && alarmAktif == false && buttonState == LOW && !tombolDitekan) {
+    // Serial.println("Tombol Emergency Ditekan!");
+    Serial2.print("BukaRegulator\n");
+    // Serial.println("Gas Terdeteksi, Tombol Emergency Di tekan");
     tombolDitekan = true;  // Set variabel penanda
     emergency = true;
   }
 
-  // Sesnor Gas == 2.00, Sensor Asap > 2.00 , Suhu Naik
-  if (nilai_sensor_co > 2.00) {
-    Serial.println("Asap Terseteksi");
 
-    // Set waktu deteksi asap
-    waktuDeteksiAsap = millis();
-    // Set suhu awal
-    if (!suhuAwalTersimpan) {
-      suhuAwal = nilai_sensor_suhu;
-      suhuAwalTersimpan = true;
-    }
-  }
-
-  if (waktuDeteksiAsap > 0 && nilai_sensor_suhu > (suhuAwal + 2) && nilai_sensor_co > 2.00 && nilaiTeganganGas > 2.00 && !httpRequestSentEmergency) {
-    Serial.println("Asap Terdeteksi, Suhu Meningkat, Gas Terdeteksi. Terjadi Kebakaran!!");
-    Serial2.print("Emergency");
-    alarmAktif = true;
-    String emergency = "emergency";
-    String nilai_emergency = "1";
-    sendHttpRequest(uri, apiKey, emergency, nilai_emergency);
-    httpRequestSentEmergency = true;
-  }
+  // if (nilai_sensor_suhu > 37.0 && nilai_sensor_co > 2.00 && gassensorAnalog > 200 && !httpRequestSentEmergency) {
+  //   Serial.println("Asap Terdeteksi, Suhu Meningkat, Gas Terdeteksi. Terjadi Kebakaran!!");
+  //   Serial2.print("Emergency\n");
+  //   alarmAktif = true;
+  //   String emergency = "emergency";
+  //   String nilai_emergency = "1";
+  //   sendHttpRequest(uri, apiKey, emergency, nilai_emergency);
+  //   httpRequestSentEmergency = true;
+  // }
 
   // Kembalikan http Req ke False, Agar Siap mengirim notif ke server
-  if (nilai_sensor_co <= 2.00 && nilaiTeganganGas <= 2.00) {
-    httpRequestSentEmergency = false;
-    suhuAwalTersimpan = false;
-  }
-
-
-  // Sensor Suhu
-  // if (nilai_sensor_suhu > 31.0) {
-  //   Serial.println("Suhu Terlalu Panas");
-  // }
-
-  // Sensor Gas
-  // if (nilaiTeganganGas > 1.00 && !httpRequestSentSensorGas) {
-  //   Serial2.print("Gas");
-  //   Serial.println("Gas Terdeteksi");
-  //   alarmAktif = true;
-  //   String nilai_sensor_gas = "1";
-  //   String sensor = "sensor_gas";
-  //   sendHttpRequest(uri, apiKey, sensor, nilai_sensor_gas);
-  // }
-
-  // if (nilaiTeganganGas <= 1.00) {
-  //   httpRequestSentSensorGas = false;
+  // if (nilai_sensor_co <= 2.00 && gassensorAnalog <= 200) {
+  //   httpRequestSentEmergency = false;
+  //   suhuAwalTersimpan = false;
   // }
 
   // Sensor Api
@@ -348,50 +317,9 @@ void readSensors() {
   // if (nilai_sensor_api != 0) {
   //   httpRequestSentSensorApi = false;
   // }
-
-  // Sensor Asap
-  // if (nilai_sensor_co > 2.00 && !httpRequestSentSensorAsap) {
-  //   Serial.println("Asap Terseteksi");
-  // Serial2.print("Asap");
-  // alarmAktif = true;
-  // String sensor_asap = "sensor_asap";
-  // String nilai_sensor_asap = "1";
-  // sendHttpRequest(uri, apiKey, sensor_asap, nilai_sensor_asap);
-  // httpRequestSentSensorAsap = true;
-
-  // Set waktu deteksi asap
-  // waktuDeteksiAsap = millis();
-  // Set suhu awal
-  //   if (!suhuAwalTersimpan) {
-  //     suhuAwal = nilai_sensor_suhu;
-  //     suhuAwalTersimpan = true;
-  //   }
-  // }
-
-  // Serial.print("Suhu Sekarang : ");
-  // Serial.println(nilai_sensor_suhu);
-
-  // Serial.print("Target       : ");
-  // Serial.println(suhuAwal + 1);
-
-  // // Sensor Suhu
-  // if (waktuDeteksiAsap > 0 && nilai_sensor_suhu > (suhuAwal + 1) && nilai_sensor_co > 2.00 && !httpRequestSentSensorAsap) {
-  //   Serial.println("Suhu Meningkat. Indikasi Kebakaran!");
-  //   Serial2.print("Asap");
-  //   alarmAktif = true;
-  //   String sensor_asap = "sensor_asap";
-  //   String nilai_sensor_asap = "1";
-  //   sendHttpRequest(uri, apiKey, sensor_asap, nilai_sensor_asap);
-  //   httpRequestSentSensorAsap = true;
-  // }
-
-  // if (nilai_sensor_co <= 2.00) {
-  //   httpRequestSentSensorAsap = false;
-  //   suhuAwalTersimpan = false;
-  // }
 }
 
-void displayData(float gas, int api, float co, float suhu) {
+void displayData(int gassensorAnalog, int api, float co, float suhu) {
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
 
@@ -415,9 +343,9 @@ void displayData(float gas, int api, float co, float suhu) {
 
   display.setCursor(0, 27);
   display.print("Gas  : ");
-  display.println(gas);
+  display.println(gassensorAnalog);
 
-  if (gas > 2) {
+  if (gassensorAnalog > 200) {
     display.setTextSize(1);
     display.setCursor(25, 3);
     display.print("Gas Terdeteksi");
@@ -439,7 +367,7 @@ void displayData(float gas, int api, float co, float suhu) {
   display.print((char)247);  // degree symbol
   display.println("C");
 
-  if (suhu > 33) {
+  if (suhu > 37) {
     display.setTextSize(1);
     display.setCursor(25, 3);
     display.print("Suhu Tinggi!");
@@ -456,8 +384,8 @@ void sendHttpRequest(const char *uri, String apiKey, String sensor, String data)
 
   if (httpCode > 0) {
     String response = http.getString();
-    Serial.println("HTTP Code: " + String(httpCode));
-    Serial.println("Response: " + response);
+    // Serial.println("HTTP Code: " + String(httpCode));
+    // Serial.println("Response: " + response);
   } else {
     Serial.println("Failed to make HTTP request");
   }
@@ -485,7 +413,7 @@ void checkWiFiConnection() {
       display.display();
     }
     if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("Connected to WiFi");
+      Serial.println("Succesfully Connected to Wifi");
       display.drawBitmap(0, 0, logo_wifi, 15, 15, 1);
       display.display();
     } else {

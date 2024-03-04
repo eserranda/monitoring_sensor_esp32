@@ -42,10 +42,8 @@ const int sensor_gas = 34;
 const int SMOKE_THRESHOLD = 800;
 
 // const char *uri = "http://192.168.2.195:8000/api/data";
-
-const char *uri = "http://192.168.2.195:8000/api/data";
-// const char *uri = "http://damkar.helloelrand.com/api/data";
-String apiKey = "Sensor02";
+const char *uri = "http://damkar.helloelrand.com/api/data";
+String apiKey = "Sensor01";
 
 const unsigned long timeout = 5000;  // waktu menghubungkan ke wifi
 

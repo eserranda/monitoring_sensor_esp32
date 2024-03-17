@@ -18,6 +18,9 @@ String receivedMessage;
 bool matikanAlarm = false;
 bool nyalakanAlarm = false;
 
+bool matikanAlarmGas = false;
+bool nyalakanAlarmGas = false;
+
 void setup() {
   Serial.begin(9600);
   Serial2.begin(9600);
@@ -41,15 +44,33 @@ void loop() {
         nyalakanAlarm = true;
         bunyikanSirine(matikanAlarm);
       } else if (receivedMessage.equals("Kebakaran\n")) {
-        Serial.println(receivedMessage);
-        Serial.println("Kebakaran Log");
+        // Serial.println(receivedMessage);
+        // Serial.println("Kebakaran Log");
         nyalakanAlarm = true;
-        bunyikanAlarmApi(matikanAlarm);
-      } else if (receivedMessage.equals("BukaRegulator\n")) {
-        Serial.println(receivedMessage);
-        Serial.println("BukaRegulator Log");
         MG995_Servo.attach(Servo_PWM);
         MG995_Servo.write(180);
+        delay(1000);
+        MG995_Servo.detach();
+        bunyikanAlarmApi(matikanAlarm);
+      } else if (receivedMessage.equals("BukaRegulator\n")) {
+        // Serial.println(receivedMessage);
+        Serial.println("BukaRegulator");
+        nyalakanAlarmGas = true;
+        MG995_Servo.attach(Servo_PWM);
+        MG995_Servo.write(180);
+        delay(1000);
+        MG995_Servo.detach();
+        bunyikanAlarmKebocoranGas(matikanAlarmGas);
+      } else if (receivedMessage.equals("BlynkBukaRegulator\n")) {
+        Serial.println("BukaRegulator Blynk");
+        MG995_Servo.attach(Servo_PWM);
+        MG995_Servo.write(180);
+        delay(1000);
+        MG995_Servo.detach();
+      } else if (receivedMessage.equals("ResetServo\n")) {
+        Serial.println("Reset Servo");
+        MG995_Servo.attach(Servo_PWM);
+        MG995_Servo.write(0);
         delay(1000);
         MG995_Servo.detach();
       }
@@ -58,7 +79,7 @@ void loop() {
   }
 }
 
-void bunyikanAlarmKebocoranGas(bool &matikanAlarm) {
+void bunyikanAlarmKebocoranGas(bool &matikanAlarmGas) {
   int frekuensiAwal = 500;     // Frekuensi awal alarm fire warning
   int frekuensiAkhir = 2500;   // Frekuensi akhir alarm fire warning
   int langkahFrekuensi = 100;  // Langkah perubahan frekuensi
@@ -68,14 +89,14 @@ void bunyikanAlarmKebocoranGas(bool &matikanAlarm) {
   int ledPin = 13;
   pinMode(ledPin, OUTPUT);
 
-  while (!matikanAlarm) {  // false
+  while (!matikanAlarmGas) {  // false
                            // Baca data dari Serial2K
     if (Serial2.available() > 0) {
       String receivedMessage = Serial2.readStringUntil('\n');
-      if (receivedMessage.equals("AlarmOff")) {
+      if (receivedMessage.equals("AlarmOffGas")) {
         Serial.println("AlarmOff Log");
-        matikanAlarm = false;
-        nyalakanAlarm = false;
+        matikanAlarmGas = false;
+        nyalakanAlarmGas = false;
         break;  // Keluar dari loop jika pesan diterima
       }
     }
@@ -116,7 +137,7 @@ void bunyikanAlarmApi(bool &matikanAlarm) {
         matikanAlarm = false;
         nyalakanAlarm = false;
         break;
-      }
+      } 
     }
 
     for (int j = frekuensiAwal; j <= frekuensiAkhir; j += langkahFrekuensi) {

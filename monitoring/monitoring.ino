@@ -11,6 +11,15 @@
 
 #include <SoftwareSerial.h>
 
+// ------ blynk ------//
+#include <BlynkSimpleEsp32.h>
+
+#define BLYNK_TEMPLATE_ID "TMPL6zGfeC0Wy"
+#define BLYNK_TEMPLATE_NAME "Tombol Buka Regulator"
+#define BLYNK_AUTH_TOKEN "T-VnCWCqnz_PUIh5q4fFK_pGZwqAss-p"
+
+#define BLYNK_PRINT Serial
+// ------ end blynk --------//
 
 #define Board ("ESP-32")
 #define PinMQ7 (35)
@@ -34,15 +43,17 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
 
 const char *ssid = "Yos";
 const char *password = "yoelmgs01";
+// char ssid[] = "Yos";
+// char pass[] = "yoelmgs01";
 
-
+const int sensor_gas2 = 33;
 const int sensor_api = 32;
 const int sensor_gas = 34;
 
 const int SMOKE_THRESHOLD = 800;
 
-// const char *uri = "http://192.168.2.195:8000/api/data";
-const char *uri = "http://damkar.helloelrand.com/api/data";
+const char *uri = "http://192.168.2.195:8000/api/data";
+// const char *uri = "http://damkar.helloelrand.com/api/data";
 String apiKey = "Sensor01";
 
 const unsigned long timeout = 5000;  // waktu menghubungkan ke wifi
@@ -54,6 +65,11 @@ unsigned long lastCheckWiFiTime = 0;  // Variabel untuk menyimpan waktu terakhir
 bool alarmAktif = false;
 bool tombolDitekan = false;
 bool emergency = false;
+bool gas1 = false;
+bool gas2 = false;
+
+bool gasSent1 = false;
+bool gasSent2 = false;
 
 bool httpRequestSentSensorGas = false;
 bool httpRequestSentSensorApi = false;
@@ -103,6 +119,9 @@ const unsigned char black_line[] PROGMEM = {
   0xFF, 0xFF, 0xFF, 0xFF,
   0xFF, 0xFF, 0xFF, 0xFF,
   0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
   0xFF, 0xFF, 0xFF, 0xFF
 };
 
@@ -126,17 +145,31 @@ const unsigned char black_line_api[] PROGMEM = {
   0xFF, 0xFF, 0xFF, 0xFF
 };
 
+
+BLYNK_WRITE(V2) {
+  int pinValue = param.asInt();
+  // Serial.println(pinValue);
+  if (pinValue == 1) {
+    Serial2.print("BlynkBukaRegulator\n");
+  } else {
+    Serial2.print("ResetServo\n");
+  }
+}
+
 void setup() {
   Serial.begin(9600);
   Serial2.begin(9600, SERIAL_8N1, 1, 3);
 
   delay(10);
-
+  // Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password, "blynk.cloud", 80);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password);
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
     for (;;)
       ;  // Jika oled tidak terdetesi maka loop tidak akan di proses
   }
+
+  pinMode(V2, OUTPUT);
 
   pinMode(sensor_api, INPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
@@ -201,7 +234,7 @@ void loop() {
   if (alarmAktif == false && buttonState == LOW && !tombolDitekan) {
     // Serial.println("Tombol Emergency Ditekan!");
     Serial2.print("Emergency\n");
-    tombolDitekan = true;   
+    tombolDitekan = true;
     emergency = true;
   }
 
@@ -217,21 +250,26 @@ void loop() {
     lastSensorReadTime = millis();  // Catat waktu terakhir pembacaan sensor
   }
 
+  Blynk.run();
   checkWiFiConnection();
 }
 
 void readSensors() {
-  MQ7.update();                                  // Update data, the arduino will read the voltage from the analog pin
+  MQ7.update();      // Update data, the arduino will read the voltage from the analog pin
   MQ7.readSensor();  // Sensor will read PPM concentration using the model, a and b values set previously or from the setup
   // MQ7.serialDebug();                             // Will print the table on the serial port
   float nilai_sensor_co = MQ7.readSensor();                // Mq-7
   int gassensorAnalog = analogRead(sensor_gas);            // Mq-6
+  int sensorGas2 = analogRead(sensor_gas2);                // Mq-2
   int nilai_sensor_api = digitalRead(sensor_api);          // Sensor Api
   float nilai_sensor_suhu = dht_sensor.readTemperature();  //Sensor Suhu
 
 
   int buttonState = digitalRead(BUTTON_PIN);  // Tombol
   int nilai_sensor_emergency = 0;
+
+  // Serial.print("Sensor Gas2   : ");
+  // Serial.println(sensorGas2);
 
   // Serial.print("Sensor Asap  : ");
   // Serial.println(nilai_sensor_co);
@@ -248,11 +286,11 @@ void readSensors() {
     Serial.println("Sensor Suhu Tidak Terhubung");
   }
 
-  displayData(gassensorAnalog, nilai_sensor_api, nilai_sensor_co, nilai_sensor_suhu);
+  displayData(gassensorAnalog, sensorGas2, nilai_sensor_api, nilai_sensor_co, nilai_sensor_suhu);
 
   // ---------------- Logika Kondisi  ------------//
 
-  // Sensor Gas > 2.00, Buka regulator
+  // Sensor Gas > 200, Buka regulator
   if (gassensorAnalog > 200) {
     Serial2.print("BukaRegulator\n");
     // Serial.println("Gas Terdeteksi");
@@ -267,22 +305,45 @@ void readSensors() {
     String nilai_sensor_api = "1";
     sendHttpRequest(uri, apiKey, sensor_api, nilai_sensor_api);
     httpRequestSentSensorApi = true;
-  } 
+  }
+
+
 
   // Kembalikan http Req ke False, Siap mengirim notif ke server
-  if (nilai_sensor_co <= 2.00 || nilai_sensor_api != 0) {
+  if (nilai_sensor_co <= 2.00 || nilai_sensor_api != 0 && nilai_sensor_suhu < 36.0) {
     httpRequestSentSensorApi = false;
+    Serial2.print("AlarmOff\n");
     suhuAwalTersimpan = false;
   }
 
   // Sensor Gas > 2.00 dan tombol Emergency == 1 (Ditekan)
-  if (gassensorAnalog > 200 && alarmAktif == false && buttonState == LOW && !tombolDitekan) {
-    // Serial.println("Tombol Emergency Ditekan!");
+  if (gassensorAnalog > 200 && !gasSent1) {
     Serial2.print("BukaRegulator\n");
-    // Serial.println("Gas Terdeteksi, Tombol Emergency Di tekan");
-    tombolDitekan = true;  // Set variabel penanda
-    emergency = true;
+    gasSent1 = true;
   }
+
+  if (gasSent1 && gassensorAnalog < 150) {
+    Serial2.print("AlarmOffGas\n");
+    gasSent1 = false;
+  }
+
+  if (sensorGas2 > 200 && !gasSent2) {
+    Serial2.print("BukaRegulator\n");
+    gasSent2 = true;
+  }
+
+  if (gasSent2 && sensorGas2 < 150) {
+    Serial2.print("AlarmOffGas\n");
+    gasSent2 = false;
+  }
+
+  // Sensor Gas > 2.00 dan tombol Emergency == 1 (Ditekan)
+  // if (gassensorAnalog > 200 && alarmAktif == false && buttonState == LOW && !tombolDitekan) {
+  // Serial.println("Gas Terdeteksi, Tombol Emergency Di tekan");
+  //   Serial2.print("BukaRegulator\n");
+  //   tombolDitekan = true;  // Set variabel penanda
+  //   emergency = true;
+  // }
 
 
   // if (nilai_sensor_suhu > 37.0 && nilai_sensor_co > 2.00 && gassensorAnalog > 200 && !httpRequestSentEmergency) {
@@ -317,20 +378,23 @@ void readSensors() {
   // }
 }
 
-void displayData(int gassensorAnalog, int api, float co, float suhu) {
+void displayData(int gassensorAnalog, int sensorGas2, int api, float co, float suhu) {
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
 
   // display.clearDisplay();
 
+  display.drawBitmap(25, 2, black_line_api, 95, 10, 0);  // Keterangan
+
   display.drawBitmap(37, 16, black_line_api, 70, 10, 0);  // Api
-  display.drawBitmap(37, 27, black_line, 40, 10, 0);      // Gas
-  display.drawBitmap(37, 38, black_line, 40, 10, 0);      // CO
-  display.drawBitmap(37, 49, black_line, 40, 10, 0);      // Suhu
-  display.drawBitmap(25, 2, black_line_api, 95, 10, 0);   // Keterangan
+  display.drawBitmap(37, 25, black_line, 40, 10, 0);      // Gas1
+  display.drawBitmap(37, 34, black_line, 40, 10, 0);      // Gas2
+  display.drawBitmap(37, 42, black_line, 40, 10, 0);      // CO
+  display.drawBitmap(37, 50, black_line, 40, 10, 0);      // Suhu
 
   display.setCursor(0, 16);
   display.print("Api  : ");
+
   if (api == 1) {
     display.println("Aman");
   } else {
@@ -339,9 +403,13 @@ void displayData(int gassensorAnalog, int api, float co, float suhu) {
     display.print("Api Terdeteksi");
   }
 
-  display.setCursor(0, 27);
-  display.print("Gas  : ");
+  display.setCursor(0, 25);
+  display.print("Gas1 : ");
   display.println(gassensorAnalog);
+
+  display.setCursor(0, 34);
+  display.print("Gas2 : ");
+  display.println(sensorGas2);
 
   if (gassensorAnalog > 200) {
     display.setTextSize(1);
@@ -349,7 +417,7 @@ void displayData(int gassensorAnalog, int api, float co, float suhu) {
     display.print("Gas Terdeteksi");
   }
 
-  display.setCursor(0, 38);
+  display.setCursor(0, 42);
   display.print("Asap : ");
   display.println(co);
 
@@ -359,7 +427,7 @@ void displayData(int gassensorAnalog, int api, float co, float suhu) {
     display.print("Asap Terdeteksi");
   }
 
-  display.setCursor(0, 49);
+  display.setCursor(0, 50);
   display.print("Suhu : ");
   display.print(suhu, 1);
   display.print((char)247);  // degree symbol
